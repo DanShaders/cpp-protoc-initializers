@@ -17,8 +17,36 @@ private:
 		printer.Indent();
 		for (int i = 0; i < message->field_count(); ++i) {
 			auto field = message->field(i);
-			printer.Print("::PROTOBUF_NAMESPACE_ID::$type$ $name$;\n", "type",
-						  field->cpp_type_name(), "name", field->name().c_str());
+			auto etype = field->cpp_type();
+			string type = "::PROTOBUF_NAMESPACE_ID::" + std::string(field->cpp_type_name());
+
+			bool cpp_convert = false;
+			if (etype == FieldDescriptor::CPPTYPE_ENUM) {
+				type = field->enum_type()->full_name();
+				cpp_convert = true;
+			} else if (etype == FieldDescriptor::CPPTYPE_MESSAGE) {
+				type = field->message_type()->full_name();
+				cpp_convert = true;
+			}
+			if (cpp_convert) {
+				string res = "::";
+				bool package_name = false;
+				for (char c : type) {
+					if (c == '.') {
+						if (package_name) {
+							res += '_';
+						} else {
+							res += "::";
+							package_name = true;
+						}
+					} else {
+						res += c;
+					}
+				}
+				type = res;
+			}
+
+			printer.Print("$type$ $name$;\n", "type", type.c_str(), "name", field->name().c_str());
 		}
 		printer.Outdent();
 		printer.Print("};\n\n$constructor$(const initializable_type &t) {\n", "constructor",
