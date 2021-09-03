@@ -4,7 +4,7 @@
 
 This plugin allows using aggregate initialization on Protocol Buffer generated classes.
 
-Invocation: `protoc --cpp_out=. --cpp_initializers_out=. PROTO_FILES`.
+Invocation: `protoc --plugin=protoc-gen-cpp_initializers=<path_to_plugin> --cpp_initializers_out=. PROTO_FILES`.
 
 Example:
 ```protobuf

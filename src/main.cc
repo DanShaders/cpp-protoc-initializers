@@ -1,4 +1,5 @@
 #include <google/protobuf/compiler/code_generator.h>
+#include <google/protobuf/compiler/cpp/cpp_generator.h>
 #include <google/protobuf/compiler/plugin.h>
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/io/printer.h>
@@ -37,9 +38,14 @@ private:
 		return true;
 	}
 
+	compiler::cpp::CppGenerator cppGenerator;
+
 public:
-	bool Generate(const FileDescriptor *file, const string &parameter [[maybe_unused]],
-				  compiler::GeneratorContext *context, string *error [[maybe_unused]]) const {
+	bool Generate(const FileDescriptor *file, const string &parameter,
+				  compiler::GeneratorContext *context, string *error) const {
+		if (!cppGenerator.Generate(file, parameter, context, error)) {
+			return false;
+		}
 		for (int i = 0; i < file->message_type_count(); ++i) {
 			GenerateFor(file->message_type(i), file, context);
 		}
