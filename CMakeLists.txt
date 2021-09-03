@@ -40,6 +40,12 @@ endif()
 
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -O2")
 
+install(
+	TARGETS ${EXE_NAME}
+	CONFIGURATIONS Release
+	RUNTIME DESTINATION bin
+)
+
 find_program(CLANG_FORMAT "clang-format")
 if(CLANG_FORMAT)
 	file(
