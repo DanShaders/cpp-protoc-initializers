@@ -49,8 +49,8 @@ private:
 			printer.Print("$type$ $name$;\n", "type", type.c_str(), "name", field->name().c_str());
 		}
 		printer.Outdent();
-		printer.Print("};\n\n$constructor$(const initializable_type &t) {\n", "constructor",
-					  message->name());
+		printer.Print("};\n\n$constructor$(const initializable_type &t) : $constructor$() {\n",
+					  "constructor", message->name());
 		printer.Indent();
 		for (int i = 0; i < message->field_count(); ++i) {
 			auto field = message->field(i);
