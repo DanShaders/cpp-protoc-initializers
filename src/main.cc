@@ -60,6 +60,11 @@ private:
 				type = convert_scoped(field->enum_type());
 			} else if (etype == FieldDescriptor::CPPTYPE_MESSAGE) {
 				type = convert_scoped(field->message_type());
+			} else if (etype == FieldDescriptor::CPPTYPE_BOOL) {
+				type = "bool";
+			}
+			if (field->is_repeated()) {
+				type = "std::vector<" + type + ">";
 			}
 			printer.Print("$type$ $name$;\n", "type", type.c_str(), "name", field->name().c_str());
 		}
@@ -69,8 +74,16 @@ private:
 		printer.Indent();
 		for (int i = 0; i < message->field_count(); ++i) {
 			auto field = message->field(i);
-			printer.Print("set_$lname$(t.$name$);\n", "lname", field->lowercase_name().c_str(),
-						  "name", field->name().c_str());
+			auto lname = field->lowercase_name().c_str(), name = field->name().c_str();
+			if (field->is_repeated()) {
+				printer.Print("for (std::size_t i = 0; i < t.$name$.size(); ++i) {\n", "name", name);
+				printer.Indent();
+				printer.Print("*add_$lname$() = t.$name$[i];", "lname", lname, "name", name);
+				printer.Outdent();
+				printer.Print("}\n");
+			} else {
+				printer.Print("set_$lname$(t.$name$);\n", "lname", lname, "name", name);
+			}
 		}
 		printer.Outdent();
 		printer.Print("}\n");
@@ -79,12 +92,19 @@ private:
 			GenerateFor(message->nested_type(i), file, context);
 		}
 
-		auto namespace_scope_inserter =
-			context->OpenForInsert(compiler::StripProto(file->name()) + ".pb.h", "namespace_scope");
-		auto printer2 = io::Printer(namespace_scope_inserter, '$');
+		{
+			auto namespace_scope_inserter = context->OpenForInsert(
+				compiler::StripProto(file->name()) + ".pb.h", "namespace_scope");
+			auto p = io::Printer(namespace_scope_inserter, '$');
 
-		printer2.Print("inline const std::string $1$::TYPE_NAME = \"$2$\";\n", "1",
-					   convert_scoped(message), "2", message->full_name());
+			p.Print("inline const std::string $1$::TYPE_NAME = \"$2$\";\n", "1",
+					convert_scoped(message), "2", message->full_name());
+		}
+		{
+			auto includes_inserter =
+				context->OpenForInsert(compiler::StripProto(file->name()) + ".pb.h", "includes");
+			io::Printer(includes_inserter, '$').Print("#include <vector>\n");
+		}
 		return true;
 	}
 
