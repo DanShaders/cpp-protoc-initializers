@@ -42,6 +42,31 @@ private:
 		return s;
 	}
 
+	string get_type_name(const FieldDescriptor *field) const {
+		using namespace std::literals;
+
+		auto etype = field->cpp_type();
+
+		string type = "::PROTOBUF_NAMESPACE_ID::" + std::string(field->cpp_type_name());
+
+		if (etype == FieldDescriptor::CPPTYPE_ENUM) {
+			type = convert_scoped(field->enum_type());
+		} else if (etype == FieldDescriptor::CPPTYPE_MESSAGE) {
+			if (field->is_map()) {
+				type = "std::map<"s + get_type_name(field->message_type()->map_key()) + ", " +
+					   get_type_name(field->message_type()->map_value()) + ">";
+			} else {
+				type = convert_scoped(field->message_type());
+			}
+		} else if (etype == FieldDescriptor::CPPTYPE_BOOL) {
+			type = "bool";
+		}
+		if (!field->is_map() && field->is_repeated()) {
+			type = "std::vector<" + type + ">";
+		}
+		return type;
+	}
+
 	bool GenerateFor(const Descriptor *message, const FileDescriptor *file,
 					 compiler::GeneratorContext *context) const {
 		auto class_scope_inserter = context->OpenForInsert(
@@ -53,19 +78,11 @@ private:
 		printer.Indent();
 		for (int i = 0; i < message->field_count(); ++i) {
 			auto field = message->field(i);
-			auto etype = field->cpp_type();
-			string type = "::PROTOBUF_NAMESPACE_ID::" + std::string(field->cpp_type_name());
+			if (field->containing_oneof()) {
+				continue;
+			}
 
-			if (etype == FieldDescriptor::CPPTYPE_ENUM) {
-				type = convert_scoped(field->enum_type());
-			} else if (etype == FieldDescriptor::CPPTYPE_MESSAGE) {
-				type = convert_scoped(field->message_type());
-			} else if (etype == FieldDescriptor::CPPTYPE_BOOL) {
-				type = "bool";
-			}
-			if (field->is_repeated()) {
-				type = "std::vector<" + type + ">";
-			}
+			string type = get_type_name(field);
 			printer.Print("$type$ $name$;\n", "type", type.c_str(), "name", field->name().c_str());
 		}
 		printer.Outdent();
@@ -74,11 +91,25 @@ private:
 		printer.Indent();
 		for (int i = 0; i < message->field_count(); ++i) {
 			auto field = message->field(i);
+			if (field->containing_oneof()) {
+				continue;
+			}
+
 			auto lname = field->lowercase_name().c_str(), name = field->name().c_str();
-			if (field->is_repeated()) {
-				printer.Print("for (std::size_t i = 0; i < t.$name$.size(); ++i) {\n", "name", name);
+			if (field->is_map()) {
+				printer.Print(
+					"for (auto &map = (*mutable_$lname$()); const auto &[key, value] : t.$name$) "
+					"{\n",
+					"lname", lname, "name", name);
 				printer.Indent();
-				printer.Print("*add_$lname$() = t.$name$[i];", "lname", lname, "name", name);
+				printer.Print("map[key] = value;\n", "lname", name);
+				printer.Outdent();
+				printer.Print("}\n");
+			} else if (field->is_repeated()) {
+				printer.Print("for (std::size_t i = 0; i < t.$name$.size(); ++i) {\n", "name",
+							  name);
+				printer.Indent();
+				printer.Print("*add_$lname$() = t.$name$[i];\n", "lname", lname, "name", name);
 				printer.Outdent();
 				printer.Print("}\n");
 			} else {
@@ -89,7 +120,10 @@ private:
 		printer.Print("}\n");
 
 		for (int i = 0; i < message->nested_type_count(); ++i) {
-			GenerateFor(message->nested_type(i), file, context);
+			auto type = message->nested_type(i);
+			if (!type->map_key()) {
+				GenerateFor(message->nested_type(i), file, context);
+			}
 		}
 
 		{
