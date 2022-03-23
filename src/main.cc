@@ -86,8 +86,10 @@ private:
 			printer.Print("$type$ $name$;\n", "type", type.c_str(), "name", field->name().c_str());
 		}
 		printer.Outdent();
-		printer.Print("};\n\n$constructor$(const initializable_type &t) : $constructor$() {\n",
-					  "constructor", convert_unscoped(message));
+		printer.Print(
+			"};\n\n$constructor$([[maybe_unused]] const initializable_type &t) : $constructor$() "
+			"{\n",
+			"constructor", convert_unscoped(message));
 		printer.Indent();
 		for (int i = 0; i < message->field_count(); ++i) {
 			auto field = message->field(i);
@@ -97,12 +99,15 @@ private:
 
 			auto lname = field->lowercase_name().c_str(), name = field->name().c_str();
 			if (field->is_map()) {
-				printer.Print(
-					"for (auto &map = (*mutable_$lname$()); const auto &[key, value] : t.$name$) "
-					"{\n",
-					"lname", lname, "name", name);
+				printer.Print("{\n");
+				printer.Indent();
+				printer.Print("auto &map = *mutable_$lname$();\n", "lname", lname);
+				printer.Print("for (const auto &[key, value] : t.$name$) {\n", "lname", lname,
+							  "name", name);
 				printer.Indent();
 				printer.Print("map[key] = value;\n", "lname", name);
+				printer.Outdent();
+				printer.Print("}\n");
 				printer.Outdent();
 				printer.Print("}\n");
 			} else if (field->is_repeated()) {
@@ -112,6 +117,8 @@ private:
 				printer.Print("*add_$lname$() = t.$name$[i];\n", "lname", lname, "name", name);
 				printer.Outdent();
 				printer.Print("}\n");
+			} else if (field->type() == FieldDescriptor::TYPE_MESSAGE) {
+				printer.Print("*mutable_$lname$() = t.$name$;\n", "lname", lname, "name", name);
 			} else {
 				printer.Print("set_$lname$(t.$name$);\n", "lname", lname, "name", name);
 			}
