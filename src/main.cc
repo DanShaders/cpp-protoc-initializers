@@ -42,7 +42,8 @@ private:
 		return s;
 	}
 
-	string get_type_name(const FieldDescriptor *field) const {
+	string get_type_name(const FieldDescriptor *field, bool *include_vector = nullptr,
+						 bool *include_optional = nullptr) const {
 		using namespace std::literals;
 
 		auto etype = field->cpp_type();
@@ -63,6 +64,15 @@ private:
 		}
 		if (!field->is_map() && field->is_repeated()) {
 			type = "std::vector<" + type + ">";
+			if (include_vector) {
+				*include_vector = true;
+			}
+		}
+		if (field->has_optional_keyword()) {
+			type = "std::optional<" + type + ">";
+			if (include_optional) {
+				*include_optional = true;
+			}
 		}
 		return type;
 	}
@@ -73,16 +83,18 @@ private:
 			compiler::StripProto(file->name()) + ".pb.h", "class_scope:" + message->full_name());
 		auto printer = io::Printer(class_scope_inserter, '$');
 
+		bool include_vector = false, include_optional = false;
+
 		printer.Print("const static std::string TYPE_NAME;\n");
 		printer.Print("struct initializable_type {\n");
 		printer.Indent();
 		for (int i = 0; i < message->field_count(); ++i) {
 			auto field = message->field(i);
-			if (field->containing_oneof()) {
+			if (field->real_containing_oneof()) {
 				continue;
 			}
 
-			string type = get_type_name(field);
+			string type = get_type_name(field, &include_vector, &include_optional);
 			printer.Print("$type$ $name$;\n", "type", type.c_str(), "name", field->name().c_str());
 		}
 		printer.Outdent();
@@ -91,19 +103,32 @@ private:
 			"{\n",
 			"constructor", convert_unscoped(message));
 		printer.Indent();
+
 		for (int i = 0; i < message->field_count(); ++i) {
 			auto field = message->field(i);
-			if (field->containing_oneof()) {
+			if (field->real_containing_oneof()) {
 				continue;
 			}
 
 			auto lname = field->lowercase_name().c_str(), name = field->name().c_str();
+			string buff;
+
+			if (field->has_optional_keyword()) {
+				printer.Print("if (t.$name$.has_value()) {\n", "name", name);
+				printer.Indent();
+				printer.Print("const auto &curr = *t.$name$;\n", "name", name);
+				name = "curr";
+			} else {
+				buff = std::string("t.") + name;
+				name = buff.c_str();
+			}
+
 			if (field->is_map()) {
 				printer.Print("{\n");
 				printer.Indent();
 				printer.Print("auto &map = *mutable_$lname$();\n", "lname", lname);
-				printer.Print("for (const auto &[key, value] : t.$name$) {\n", "lname", lname,
-							  "name", name);
+				printer.Print("for (const auto &[key, value] : $name$) {\n", "lname", lname, "name",
+							  name);
 				printer.Indent();
 				printer.Print("map[key] = value;\n", "lname", name);
 				printer.Outdent();
@@ -111,16 +136,20 @@ private:
 				printer.Outdent();
 				printer.Print("}\n");
 			} else if (field->is_repeated()) {
-				printer.Print("for (std::size_t i = 0; i < t.$name$.size(); ++i) {\n", "name",
-							  name);
+				printer.Print("for (std::size_t i = 0; i < $name$.size(); ++i) {\n", "name", name);
 				printer.Indent();
-				printer.Print("*add_$lname$() = t.$name$[i];\n", "lname", lname, "name", name);
+				printer.Print("*add_$lname$() = $name$[i];\n", "lname", lname, "name", name);
 				printer.Outdent();
 				printer.Print("}\n");
 			} else if (field->type() == FieldDescriptor::TYPE_MESSAGE) {
-				printer.Print("*mutable_$lname$() = t.$name$;\n", "lname", lname, "name", name);
+				printer.Print("*mutable_$lname$() = $name$;\n", "lname", lname, "name", name);
 			} else {
-				printer.Print("set_$lname$(t.$name$);\n", "lname", lname, "name", name);
+				printer.Print("set_$lname$($name$);\n", "lname", lname, "name", name);
+			}
+
+			if (field->has_optional_keyword()) {
+				printer.Outdent();
+				printer.Print("}\n");
 			}
 		}
 		printer.Outdent();
@@ -144,7 +173,13 @@ private:
 		{
 			auto includes_inserter =
 				context->OpenForInsert(compiler::StripProto(file->name()) + ".pb.h", "includes");
-			io::Printer(includes_inserter, '$').Print("#include <vector>\n");
+			auto p = io::Printer(includes_inserter, '$');
+			if (include_vector) {
+				p.Print("#include <vector>\n");
+			}
+			if (include_optional) {
+				p.Print("#include <optional>\n");
+			}
 		}
 		return true;
 	}
@@ -161,6 +196,10 @@ public:
 			GenerateFor(file->message_type(i), file, context);
 		}
 		return true;
+	}
+
+	uint64_t GetSupportedFeatures() const override {
+		return FEATURE_PROTO3_OPTIONAL;
 	}
 };
 
