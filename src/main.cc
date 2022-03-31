@@ -7,6 +7,11 @@
 #include <vector>
 using namespace google::protobuf;
 
+const char *CPP_TYPE_REMAP[] = {
+	nullptr, "int",  "int64_t", "uint32_t",    "uint64_t", "double",
+	"float", "bool", nullptr,   "std::string", nullptr,
+};
+
 class Generator : public compiler::CodeGenerator {
 private:
 	template <typename T>
@@ -48,7 +53,7 @@ private:
 
 		auto etype = field->cpp_type();
 
-		string type = "::PROTOBUF_NAMESPACE_ID::" + std::string(field->cpp_type_name());
+		string type;
 
 		if (etype == FieldDescriptor::CPPTYPE_ENUM) {
 			type = convert_scoped(field->enum_type());
@@ -59,9 +64,10 @@ private:
 			} else {
 				type = convert_scoped(field->message_type());
 			}
-		} else if (etype == FieldDescriptor::CPPTYPE_BOOL) {
-			type = "bool";
+		} else {
+			type = CPP_TYPE_REMAP[field->cpp_type()];
 		}
+
 		if (!field->is_map() && field->is_repeated()) {
 			type = "std::vector<" + type + ">";
 			if (include_vector) {
