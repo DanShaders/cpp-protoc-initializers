@@ -6,6 +6,7 @@
 
 #include <vector>
 using namespace google::protobuf;
+using std::string;
 
 const char *CPP_TYPE_REMAP[] = {
 	nullptr, "int",  "int64_t", "uint32_t",    "uint64_t", "double",
