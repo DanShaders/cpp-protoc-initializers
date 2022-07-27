@@ -145,7 +145,11 @@ private:
 			} else if (field->is_repeated()) {
 				printer.Print("for (std::size_t i = 0; i < $name$.size(); ++i) {\n", "name", name);
 				printer.Indent();
-				printer.Print("*add_$lname$() = $name$[i];\n", "lname", lname, "name", name);
+				if (field->type() == FieldDescriptor::TYPE_MESSAGE) {
+					printer.Print("*add_$lname$() = $name$[i];\n", "lname", lname, "name", name);
+				} else {
+					printer.Print("add_$lname$($name$[i]);\n", "lname", lname, "name", name);	
+				}
 				printer.Outdent();
 				printer.Print("}\n");
 			} else if (field->type() == FieldDescriptor::TYPE_MESSAGE) {
