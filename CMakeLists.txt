@@ -1,59 +1,21 @@
-cmake_minimum_required(VERSION 3.10)
+# FIXME: This surely can be lowered.
+cmake_minimum_required(VERSION 3.27)
 
 project(cpp-protoc-initializers VERSION 0.0.0)
 
-include(FindProtobuf)
-find_package(Protobuf REQUIRED)
+# FIXME: At least on Arch Linux, /usr/lib/cmake is not in a default search path. Figure out whose
+#        responsibility is to add it.
+find_package(protobuf/protobuf REQUIRED CONFIG PATHS /usr/lib/cmake)
 
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED True)
-
-set(
-	CXX_SOURCES
-	src/main.cc
-)
-
-set(EXE_NAME protoc-gen-cpp_initializers)
-
-add_executable(${EXE_NAME} ${CXX_SOURCES})
-
-target_include_directories(
-	${EXE_NAME} PRIVATE
-	${Protobuf_INCLUDE_DIRS}
-)
-
-target_compile_options(
-	${EXE_NAME} PRIVATE
-	-Wall -Wextra -Wshadow -Wconversion
-	-fdiagnostics-color=always
-)
+add_executable(cpp-protoc-initializers src/main.cc)
 
 target_link_libraries(
-	${EXE_NAME} PRIVATE
-	${Protobuf_PROTOC_LIBRARIES}
-	${Protobuf_LIBRARIES}
+	cpp-protoc-initializers PRIVATE
+	protobuf::libprotobuf
+	protobuf::libprotoc
 )
 
-if (CMAKE_BUILD_TYPE STREQUAL Release)
-	set_property(TARGET ${EXE_NAME} PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
-endif()
-
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -O2")
-
-install(
-	TARGETS ${EXE_NAME}
-	CONFIGURATIONS Release
-	RUNTIME DESTINATION bin
+set_target_properties(
+	cpp-protoc-initializers
+	PROPERTIES OUTPUT_NAME protoc-gen-cpp_initializers
 )
-
-find_program(CLANG_FORMAT "clang-format")
-if(CLANG_FORMAT)
-	file(
-		GLOB_RECURSE ALL_CXX_SOURCE_FILES
-		*.cc *.h
-	)
-	add_custom_target(
-		format
-		COMMAND ${CLANG_FORMAT} -i ${ALL_CXX_SOURCE_FILES}
-	)
-endif()
